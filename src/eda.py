@@ -533,3 +533,48 @@ def plot_number_of_records_and_studies_by_disease_site(
     axes[1].set_xlim(0, unique_studies.max() * 1.25)
     plt.tight_layout()
     plt.show()
+
+
+
+def plot_top_ae_terms(df, column="ae_term", top_n=15):
+    """
+    Plot the top N AE terms as a horizontal bar chart with value and percentage labels.
+    Automatically chooses color based on DataFrame name:
+        - ct → #A7C7E7 (blueish)
+        - ct_high_grades → #FFB6B6 (pinkish)
+    """
+    import inspect
+    # Detect color based on variable name
+    caller_locals = inspect.currentframe().f_back.f_locals
+    color = "#A7C7E7"  # default
+    for name, val in caller_locals.items():
+        if val is df:
+            if name == "ct_high_grades":
+                color = "#FFB6B6"
+            elif name == "ct":
+                color = "#A7C7E7"
+            break
+
+    # Count occurrences and get top N
+    value_counts = df[column].value_counts()
+    total = value_counts.sum()
+    top_terms = value_counts.head(top_n).sort_values()
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    top_terms.plot(kind="barh", color=color)
+    plt.title(f"Top {top_n} AE Terms", fontsize=14, weight="bold")
+    plt.xlabel("Number of Records", fontsize=12)
+    plt.ylabel("AE Term", fontsize=12)
+    plt.grid(False)
+
+    # Add value + percentage labels
+    for i, (term, value) in enumerate(top_terms.items()):
+        pct = (value / total) * 100
+        label = f"{value} ({pct:.1f}%)"
+        plt.text(value + max(top_terms) * 0.01, i, label, va="center", fontsize=10)
+
+    # Adjust axis so labels fit nicely
+    plt.xlim(0, max(top_terms) * 1.2)
+    plt.tight_layout()
+    plt.show()
