@@ -111,8 +111,7 @@ cols_of_interest = [
 
 ae_term_corrections = {
     'Gastoparesis': 'Gastroparesis',
-    'Musculoskeletal and connective tissue disorder -  Other, specify':
-        'Musculoskeletal and connective tissue disorder - Other, specify',
+    'Musculoskeletal and connective tissue disorder -  Other, specify': 'Musculoskeletal and connective tissue disorder - Other, specify',
     'Heart Failure': 'Heart failure',
     'Atrial Flutter': 'Atrial flutter',
     'Chest Wall Pain': 'Chest wall pain'
