@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-from typing import Optional
 import textwrap
 from math import ceil
-from matplotlib.patches import Patch
+from typing import List, Tuple, Optional, Sequence
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch, FancyBboxPatch, FancyArrowPatch
 
 
-def plot_records_per_grade(df, grade_col='ae_grade'):
+def plot_records_per_grade(df, grade_col='mapped_grade'):
     """
     Plot the number of records per AE grade.
 
@@ -16,7 +17,7 @@ def plot_records_per_grade(df, grade_col='ae_grade'):
     df : pandas.DataFrame
         DataFrame containing the AE grade column.
     grade_col : str, optional
-        Column name containing AE grades (default: 'ae_grade').
+        Column name containing AE grades (default: 'mapped_grade').
 
     Returns
     -------
@@ -241,7 +242,7 @@ def build_rank_table(
     ct : DataFrame
         Full dataset.
     ct_high_grades : DataFrame
-        High-grade subset (e.g., ae_grade >= 3).
+        High-grade subset (e.g., mapped_grade >= 3).
     category_col : str
         Column with AE category (default: 'mapped_soc').
     save_path : str or None
@@ -282,7 +283,7 @@ def build_rank_table(
 
     # Step 7: rename (final output only)
     rank_table = rank_table.rename(columns={
-        category_col: "ae_category",
+        category_col: "mapped_category",
         "count_all": "n_all_grades",
         "rank_all": "rank_all_grades",
         "count_high": "n_grade_3plus",
@@ -299,7 +300,7 @@ def build_rank_table(
 
 
 
-def summarize_other_specify_terms(ct: pd.DataFrame, grade_col: str = "ae_grade", term_col: str = "mapped_term") -> pd.DataFrame:
+def summarize_other_specify_terms(ct: pd.DataFrame, grade_col: str = "mapped_grade", term_col: str = "mapped_term") -> pd.DataFrame:
     """
     Summarize how many AE terms end with "Other, specify" for all grades and for grade ≥3.
 
@@ -308,7 +309,7 @@ def summarize_other_specify_terms(ct: pd.DataFrame, grade_col: str = "ae_grade",
     ct : DataFrame
         The full dataset containing AE grades and terms.
     grade_col : str, optional
-        Column name for AE grade (default: "ae_grade").
+        Column name for AE grade (default: "mapped_grade").
     term_col : str, optional
         Column name for AE term (default: "mapped_term").
 
@@ -536,7 +537,7 @@ def plot_number_of_records_and_studies_by_disease_site(
 
 
 
-def plot_top_ae_terms(df, column="ae_term", top_n=15):
+def plot_top_ae_terms(df, column="mapped_term", top_n=15):
     """
     Plot the top N AE terms as a horizontal bar chart with value and percentage labels.
     Automatically chooses color based on DataFrame name:
@@ -578,3 +579,182 @@ def plot_top_ae_terms(df, column="ae_term", top_n=15):
     plt.xlim(0, max(top_terms) * 1.2)
     plt.tight_layout()
     plt.show()
+
+
+
+
+
+def visualize_rules(
+    association_rules_df,
+    top_n=20,
+    figsize=(17, 27),
+    ROW_GAP=2.5,
+    ITEM_H=0.35,
+    ITEM_GAP=0.35,
+    CONTAINER_PAD=0.30,
+    METRICS_Y_OFFSET=0.42,
+    thickness_metric="confidence",   # could be "support" or "lift"
+    arrow_head_scale=22,
+    cmap_name="viridis",             # high contrast
+    clip_light_fraction=0.25         # avoids pale colors
+):
+
+    df = association_rules_df.copy()
+    df["antecedents"] = df["antecedents"].apply(list)
+    df["consequents"] = df["consequents"].apply(list)
+
+    rules_sorted = df.nlargest(top_n, "lift").reset_index(drop=True)
+    n = len(rules_sorted)
+
+    if n == 0:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
+        ax.text(0.5, 0.5, "No rules to display", ha="center", va="center")
+        return fig, ax
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_xlim(0, 10)
+    total_height = n * ROW_GAP + 1
+    ax.set_ylim(0, total_height)
+    ax.axis("off")
+
+    # Box colors
+    lhs_color, rhs_color = "#c3e6cb", "#d4c5f9"
+    lhs_border, rhs_border = "#28a745", "#6f42c1"
+    container_color = "#f8f9fa"
+
+    # Thickness normalization
+    metric_vals = rules_sorted[thickness_metric].astype(float).values
+    lo, hi = metric_vals.min(), metric_vals.max()
+    span = hi - lo if hi > lo else 1e-9
+
+    def thickness(v):
+        return 1.5 + 5 * ((float(v) - lo) / span)
+
+    # Support normalization → color
+    support_vals = rules_sorted["support"].astype(float).values
+    smin, smax = support_vals.min(), support_vals.max()
+    norm = mcolors.Normalize(vmin=smin, vmax=smax if smax > smin else smin + 1e-9)
+
+    cmap = plt.get_cmap(cmap_name).reversed()   # version-safe colormap
+
+    def support_color(s):
+        t = norm(float(s))
+        t = clip_light_fraction + (1 - clip_light_fraction) * t  # shift away from pale colors
+        return cmap(np.clip(t, 0, 1))
+
+    # ---------------------------
+    # Headers (IF/THEN labels)
+    # ---------------------------
+    ax.text(
+        1.75, total_height - ROW_GAP * 0.15, 'IF (Antecedents)',
+        ha='center', va='center', fontsize=13, fontweight='bold', color=lhs_border,
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
+                  edgecolor=lhs_border, linewidth=2)
+    )
+
+    ax.text(
+        7.75, total_height - ROW_GAP * 0.15, 'THEN (Consequents)',
+        ha='center', va='center', fontsize=13, fontweight='bold', color=rhs_border,
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
+                  edgecolor=rhs_border, linewidth=2)
+    )
+
+    # Draw rules
+    for idx, row in rules_sorted.iterrows():
+        y = total_height - (idx + 1) * ROW_GAP
+
+        lhs_items = row["antecedents"]
+        rhs_items = row["consequents"]
+
+        support = float(row["support"])
+        confidence = float(row["confidence"])
+        lift = float(row["lift"])
+
+        # --- LHS container ---
+        h = len(lhs_items)*ITEM_H + (len(lhs_items)-1)*ITEM_GAP + CONTAINER_PAD
+        y0 = y - h/2
+        ax.add_patch(FancyBboxPatch(
+            (0.5, y0), 2.5, h,
+            boxstyle="round,pad=0.05",
+            edgecolor=lhs_border, facecolor=container_color,
+            linewidth=2.5, alpha=0.3
+        ))
+
+        cy = y0 + CONTAINER_PAD/2
+        for it in lhs_items:
+            ax.add_patch(FancyBboxPatch(
+                (0.6, cy), 2.3, ITEM_H,
+                boxstyle="round,pad=0.05",
+                edgecolor=lhs_border, facecolor=lhs_color, linewidth=2))
+            ax.text(1.75, cy+ITEM_H/2, it, ha="center", va="center", fontsize=9, fontweight="bold")
+            cy += ITEM_H + ITEM_GAP
+
+        # --- Arrow ---
+        arrow_color = support_color(support)
+        ax.add_patch(FancyArrowPatch(
+            (3.6, y), (6.0, y),
+            arrowstyle="-|>",
+            mutation_scale=arrow_head_scale,
+            color=arrow_color,
+            linewidth=thickness(row[thickness_metric]),
+            alpha=0.95
+        ))
+
+        # Metrics label
+        ax.text(4.8, y + METRICS_Y_OFFSET,
+                f"Sup: {support:.2f} | Conf: {confidence:.2f} | Lift: {lift:.2f}",
+                ha="center", fontsize=9, color="white", fontweight="bold",
+                bbox=dict(boxstyle="round,pad=0.45", facecolor="#3b82f6",
+                          edgecolor="white", linewidth=1, alpha=0.9))
+
+        # --- RHS container ---
+        h2 = len(rhs_items)*ITEM_H + (len(rhs_items)-1)*ITEM_GAP + CONTAINER_PAD
+        y2 = y - h2/2
+        ax.add_patch(FancyBboxPatch(
+            (6.5, y2), 2.5, h2,
+            boxstyle="round,pad=0.05",
+            edgecolor=rhs_border, facecolor=container_color,
+            linewidth=2.5, alpha=0.3
+        ))
+
+        cy = y2 + CONTAINER_PAD/2
+        for it in rhs_items:
+            ax.add_patch(FancyBboxPatch(
+                (6.6, cy), 2.3, ITEM_H,
+                boxstyle="round,pad=0.05",
+                edgecolor=rhs_border, facecolor=rhs_color, linewidth=2))
+            ax.text(7.75, cy+ITEM_H/2, it, ha="center", va="center", fontsize=9, fontweight="bold")
+            cy += ITEM_H + ITEM_GAP
+
+        ax.text(0.1, y, f"#{idx+1}", 
+                ha="center", va="center", fontsize=11, fontweight="bold",
+                bbox=dict(boxstyle="circle,pad=0.3", facecolor="white", edgecolor="#6b7280", linewidth=1.5))
+
+    # Colorbar
+    sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, fraction=0.03, pad=0.02)
+    cbar.set_label("Support", rotation=270, labelpad=12, fontsize=11)
+
+    # ---------------------------
+    # Legend (bottom-left)
+    # ---------------------------
+    legend_text = (
+        "Rule Interpretation:\n"
+        "• Each colored box = one item\n"
+        "• Items stacked = ALL must occur together (AND)\n"
+        "• Gray container = groups related items\n"
+        "• Arrow color = Support\n"       
+        f"• Arrow thickness = {thickness_metric.capitalize()}\n"
+        "• Sorted by: Lift (highest at top)"
+    )
+    ax.text(
+        0.5, -1, legend_text, ha='left', va='top', fontsize=9,
+        bbox=dict(boxstyle='round,pad=0.7', facecolor='#f3f4f6',
+                  edgecolor='#9ca3af', linewidth=1.5),
+        family='monospace'
+    )
+
+    plt.tight_layout()
+    return fig, ax

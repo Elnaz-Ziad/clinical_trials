@@ -79,3 +79,39 @@ def parse_mixed_date(val):
         return pd.to_datetime(val_str, dayfirst=False, errors='coerce')  # Dash ⇒ yyyy-mm-dd
     else:
         return pd.to_datetime(val_str, errors='coerce')  # Catch-all fallback
+
+
+
+
+def preprocessing_for_arm(
+    df: pd.DataFrame,
+    *,
+    level: str = "mapped_term",   # choose "mapped_term" or "mapped_soc"
+    basket_cols=("study_name", "mrn")
+) -> pd.DataFrame:
+    """
+    Preprocess raw AE data into a basket × item boolean one-hot matrix.
+    """
+    df = df.copy()
+
+    # Clean basket columns & item level
+    for c in basket_cols:
+        df[c] = df[c].astype("string").str.strip()
+    df[level] = df[level].astype("string").str.strip()
+
+    # Build basket_id
+    df["basket_id"] = df[basket_cols[0]] + "_" + df[basket_cols[1]]
+
+    # Drop duplicate item occurrences per basket
+    unique_pairs = df[["basket_id", level]].drop_duplicates().dropna()
+
+    # Pivot to basket × item matrix
+    basket_matrix = (
+        unique_pairs
+        .assign(value=True)
+        .pivot_table(index="basket_id", columns=level, values="value", fill_value=False)
+        .astype(bool)
+        .sort_index(axis=1)   # sort columns alphabetically
+    )
+
+    return basket_matrix
