@@ -1,3 +1,3 @@
 # Clinical Trials
 
-This repository includes code to clean and preprocess clinical trial data, create summary visualizations, and run association rule mining to explore adverse event co-occurance rules in the data.
+This repository contains code to (1) clean and preprocess clinical trial datasets, (2) generate cohort- and event-level summary tables and visualizations, and (3) perform association rule mining to identify and quantify adverse-event co-occurrence patterns.
